@@ -1,5 +1,5 @@
 # menambahkan jsonify, make_response
-from flask import Flask, render_template, request, redirect, url_for, jsonify, make_response
+from flask import Flask, session, render_template, request, redirect, url_for, jsonify, make_response
 from flask_sqlalchemy import SQLAlchemy
 from sqlalchemy import text
 import sqlite3
@@ -25,11 +25,19 @@ USER_CREDENTIALS = [
 ]
 # --- Akhir menambahan Hardcoded
 
+# Key for encrypting the random number
+encryption_key = Fernet.generate_key()
+cipher = Fernet(encryption_key)
+
+sessions = {}
+
 class Student(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(100), nullable=False)
     age = db.Column(db.Integer, nullable=False)
     grade = db.Column(db.String(10), nullable=False)
+    userid = db.Column(db.String(256), nullable=False)
+    
 
     def __repr__(self):
         return f'<Student {self.name}>'
@@ -37,7 +45,7 @@ class Student(db.Model):
 @app.route('/login', methods=['POST', 'GET'])
 def login():
     if request.method == 'POST':
-        data = request.json
+        data = request.form
         if not data or 'username' not in data or 'password' not in data:
             return jsonify({"error": "Username and password required"}), 400
         
@@ -57,11 +65,19 @@ def login():
                 sessions[random_number] = {"expires": expiration, "userid": cred['username']}
 
                 # Set cookie
-                response = make_response({"message": "Login successful!"})
+                response = make_response(redirect(url_for('index')))
                 response.set_cookie('session_id', encrypted_session_id.decode(), httponly=True, max_age=60*60)
                 return response
 
-        return jsonify({"error": "Invalid username or password"}), 401
+
+        return '''
+            <form method="post">
+                <h1>user name tidak valid</h1>
+                <p><input type="text" name="username" placeholder="Enter your username"></p>
+                <p><input type="password" name="password" placeholder="Enter your password"></p>
+                <p><button type="submit">Login</button></p>
+            </form>
+        ''', 401
     else:
         return '''
             <form method="post">
@@ -77,23 +93,24 @@ def check_cookie():
         # Get the session ID from the cookie
         session_id_encrypted = request.cookies.get('session_id')
         if not session_id_encrypted:
-            return jsonify({"error": "Authentication required"}), 401
+            return redirect (url_for('login'))
 
         # Decrypt the session ID
         try:
             session_id = cipher.decrypt(session_id_encrypted.encode()).decode()
             session = sessions.get(session_id)
+            print (session)
         except Exception:
-            return jsonify({"error": "Invalid session"}), 401
+            return redirect (url_for('login'))
 
         # Validate session
         session = sessions.get(session_id)
         if not session or session['expires'] < datetime.datetime.now():
-            return jsonify({"error": "Session expired or invalid"}), 401
+            return redirect (url_for('login'))
 
 #--- akhir penambahan kode ---
 
-@app.route('/')
+@app.route('/home')
 def index():
     # RAW Query
     students = db.session.execute(text('SELECT * FROM student')).fetchall()
@@ -118,6 +135,8 @@ def add_student():
     #     {'name': name, 'age': age, 'grade': grade}
     # )
     # db.session.commit()
+
+
     query = f"INSERT INTO student (name, age, grade) VALUES ('{name}', {age}, '{grade}')"
     cursor.execute(query)
     connection.commit()
@@ -129,7 +148,7 @@ def add_student():
 def delete_student(id):
     # Cuplikan pengamanan aset atau 'ownership'
     student = db.session.execute(text(f"SELECT * FROM student WHERE id={id}")).fetchone()
-    if student.userid is not session.get('userid'):
+    if student.userid != session.get('userid'):
         return jsonify({"error": "User is not permitted to edit this student"}), 403
     # end
 
@@ -143,9 +162,9 @@ def delete_student(id):
 def edit_student(id):
     # Cuplikan pengamanan aset atau 'ownership'
     student = db.session.execute(text(f"SELECT * FROM student WHERE id={id}")).fetchone()
+    if student.userid != session.get('userid'):
+        return '''Tidak boleh diupdate''', 403
     if request.method == 'POST':
-        if student.userid is not session.get('userid'):
-            return jsonify({"error": "User is not permitted to edit this student"}), 403
     # end
         name = request.form['name']
         age = request.form['age']
