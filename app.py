@@ -98,8 +98,9 @@ def add_student():
     name = request.form['name']
     age = request.form['age']
     grade = request.form['grade']
+    # Cuplikan pengamanan aset atau 'ownership'
     userid = session.get('userid')
-    
+    # end
     
 
     connection = sqlite3.connect('instance/students.db')
@@ -120,9 +121,12 @@ def add_student():
 
 @app.route('/delete/<string:id>') 
 def delete_student(id):
-    student = db.session.execute(text('SELECT * FROM student WHERE id={id}')).fetchAll()
+    # Cuplikan pengamanan aset atau 'ownership'
+    student = db.session.execute(text(f"SELECT * FROM student WHERE id={id}")).fetchone()
     if student.userid is not session.get('userid'):
         return jsonify({"error": "User is not permitted to edit this student"}), 403
+    # end
+
     # RAW Query
     db.session.execute(text(f"DELETE FROM student WHERE id={id}"))
     db.session.commit()
@@ -131,10 +135,12 @@ def delete_student(id):
 
 @app.route('/edit/<int:id>', methods=['GET', 'POST'])
 def edit_student(id):
+    # Cuplikan pengamanan aset atau 'ownership'
+    student = db.session.execute(text(f"SELECT * FROM student WHERE id={id}")).fetchone()
     if request.method == 'POST':
-        student = db.session.execute(text('SELECT * FROM student WHERE id={id}')).fetchAll()
         if student.userid is not session.get('userid'):
             return jsonify({"error": "User is not permitted to edit this student"}), 403
+    # end
         name = request.form['name']
         age = request.form['age']
         grade = request.form['grade']
@@ -145,7 +151,6 @@ def edit_student(id):
         return redirect(url_for('index'))
     else:
         # RAW Query
-        student = db.session.execute(text(f"SELECT * FROM student WHERE id={id}")).fetchone()
         return render_template('edit.html', student=student)
 
 # if __name__ == '__main__':
