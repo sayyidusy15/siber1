@@ -120,6 +120,9 @@ def add_student():
 
 @app.route('/delete/<string:id>') 
 def delete_student(id):
+    student = db.session.execute(text('SELECT * FROM student WHERE id={id}')).fetchAll()
+    if student.userid is not session.get('userid'):
+        return jsonify({"error": "User is not permitted to edit this student"}), 403
     # RAW Query
     db.session.execute(text(f"DELETE FROM student WHERE id={id}"))
     db.session.commit()
@@ -129,6 +132,9 @@ def delete_student(id):
 @app.route('/edit/<int:id>', methods=['GET', 'POST'])
 def edit_student(id):
     if request.method == 'POST':
+        student = db.session.execute(text('SELECT * FROM student WHERE id={id}')).fetchAll()
+        if student.userid is not session.get('userid'):
+            return jsonify({"error": "User is not permitted to edit this student"}), 403
         name = request.form['name']
         age = request.form['age']
         grade = request.form['grade']
