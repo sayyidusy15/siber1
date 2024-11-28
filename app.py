@@ -1,12 +1,29 @@
-from flask import Flask, render_template, request, redirect, url_for
+# menambahkan jsonify, make_response
+from flask import Flask, render_template, request, redirect, url_for, jsonify, make_response
 from flask_sqlalchemy import SQLAlchemy
 from sqlalchemy import text
 import sqlite3
+
+#install pip install cryptpgraphy
+#menambahkan code dibawah ini juga 
+from cryptography.fernet import Fernet
+import hashlib
+import secrets
+import datetime
 
 app = Flask(__name__)
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///students.db'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 db = SQLAlchemy(app)
+
+# --- Menambahkan Hardcoded hashes for username and password (hashed using SHA-256)
+USER_CREDENTIALS = [
+    {
+        "username": hashlib.sha256("user1".encode()).hexdigest(),
+        "password": hashlib.sha256("password1".encode()).hexdigest(),
+    },
+]
+# --- Akhir menambahan Hardcoded
 
 class Student(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -16,6 +33,57 @@ class Student(db.Model):
 
     def __repr__(self):
         return f'<Student {self.name}>'
+
+# --- awal penambahan kode ---
+@app.route('/login', methods=['POST'])
+def login():
+    data = request.json
+    if not data or 'username' not in data or 'password' not in data:
+        return jsonify({"error": "Username and password required"}), 400
+    
+    # Hash received username and password
+    username_hash = hashlib.sha256(data['username'].encode()).hexdigest()
+    password_hash = hashlib.sha256(data['password'].encode()).hexdigest()
+
+    # Validate credentials
+    for cred in USER_CREDENTIALS:
+        if cred['username'] == username_hash and cred['password'] == password_hash:
+            # Generate a random session ID
+            random_number = secrets.token_hex(16)
+            encrypted_session_id = cipher.encrypt(random_number.encode())
+
+            # Store session with expiration (e.g., 1 hour)
+            expiration = datetime.datetime.now() + datetime.timedelta(hours=1)
+            sessions[random_number] = {"expires": expiration, "userid": cred['username']}
+
+            # Set cookie
+            response = make_response({"message": "Login successful!"})
+            response.set_cookie('session_id', encrypted_session_id.decode(), httponly=True, max_age=60*60)
+            return response
+
+    return jsonify({"error": "Invalid username or password"}), 401
+
+@app.before_request
+def check_cookie():
+    if request.endpoint not in ['login', 'static']:  # Skip login and static endpoints
+        # Get the session ID from the cookie
+        session_id_encrypted = request.cookies.get('session_id')
+        if not session_id_encrypted:
+            return jsonify({"error": "Authentication required"}), 401
+
+        # Decrypt the session ID
+        try:
+            session_id = cipher.decrypt(session_id_encrypted.encode()).decode()
+            session = sessions.get(session_id)
+        except Exception:
+            return jsonify({"error": "Invalid session"}), 401
+
+        # Validate session
+        session = sessions.get(session_id)
+        if not session or session['expires'] < datetime.datetime.now():
+            return jsonify({"error": "Session expired or invalid"}), 401
+
+#--- akhir penambahan kode ---
 
 @app.route('/')
 def index():
