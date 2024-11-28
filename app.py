@@ -34,34 +34,42 @@ class Student(db.Model):
     def __repr__(self):
         return f'<Student {self.name}>'
 
-# --- awal penambahan kode ---
-@app.route('/login', methods=['POST'])
+@app.route('/login', methods=['POST', 'GET'])
 def login():
-    data = request.json
-    if not data or 'username' not in data or 'password' not in data:
-        return jsonify({"error": "Username and password required"}), 400
-    
-    # Hash received username and password
-    username_hash = hashlib.sha256(data['username'].encode()).hexdigest()
-    password_hash = hashlib.sha256(data['password'].encode()).hexdigest()
+    if request.method == 'POST':
+        data = request.json
+        if not data or 'username' not in data or 'password' not in data:
+            return jsonify({"error": "Username and password required"}), 400
+        
+        # Hash received username and password
+        username_hash = hashlib.sha256(data['username'].encode()).hexdigest()
+        password_hash = hashlib.sha256(data['password'].encode()).hexdigest()
 
-    # Validate credentials
-    for cred in USER_CREDENTIALS:
-        if cred['username'] == username_hash and cred['password'] == password_hash:
-            # Generate a random session ID
-            random_number = secrets.token_hex(16)
-            encrypted_session_id = cipher.encrypt(random_number.encode())
+        # Validate credentials
+        for cred in USER_CREDENTIALS:
+            if cred['username'] == username_hash and cred['password'] == password_hash:
+                # Generate a random session ID
+                random_number = secrets.token_hex(16)
+                encrypted_session_id = cipher.encrypt(random_number.encode())
 
-            # Store session with expiration (e.g., 1 hour)
-            expiration = datetime.datetime.now() + datetime.timedelta(hours=1)
-            sessions[random_number] = {"expires": expiration, "userid": cred['username']}
+                # Store session with expiration (e.g., 1 hour)
+                expiration = datetime.datetime.now() + datetime.timedelta(hours=1)
+                sessions[random_number] = {"expires": expiration, "userid": cred['username']}
 
-            # Set cookie
-            response = make_response({"message": "Login successful!"})
-            response.set_cookie('session_id', encrypted_session_id.decode(), httponly=True, max_age=60*60)
-            return response
+                # Set cookie
+                response = make_response({"message": "Login successful!"})
+                response.set_cookie('session_id', encrypted_session_id.decode(), httponly=True, max_age=60*60)
+                return response
 
-    return jsonify({"error": "Invalid username or password"}), 401
+        return jsonify({"error": "Invalid username or password"}), 401
+    else:
+        return '''
+            <form method="post">
+                <p><input type="text" name="username" placeholder="Enter your username"></p>
+                <p><input type="password" name="password" placeholder="Enter your password"></p>
+                <p><button type="submit">Login</button></p>
+            </form>
+        '''
 
 @app.before_request
 def check_cookie():
