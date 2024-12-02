@@ -69,23 +69,11 @@ def login():
                 response.set_cookie('session_id', encrypted_session_id.decode(), httponly=True, max_age=60*60)
                 return response
 
-
-        return '''
-            <form method="post">
-                <h1>user name tidak valid</h1>
-                <p><input type="text" name="username" placeholder="Enter your username"></p>
-                <p><input type="password" name="password" placeholder="Enter your password"></p>
-                <p><button type="submit">Login</button></p>
-            </form>
-        ''', 401
-    else:
-        return '''
-            <form method="post">
-                <p><input type="text" name="username" placeholder="Enter your username"></p>
-                <p><input type="password" name="password" placeholder="Enter your password"></p>
-                <p><button type="submit">Login</button></p>
-            </form>
-        '''
+        # If login fails, return to login page with error
+        # return render_template('login.html', error="Invalid username or password")
+    
+    # GET request - show login page
+    return render_template('login.html')
 
 @app.before_request
 def check_cookie():
