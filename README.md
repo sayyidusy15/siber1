@@ -33,6 +33,9 @@ Ikuti langkah-langkah di bawah ini untuk menginstal dan menjalankan proyek ini s
    ```bash
    source .venv/bin/activate
    ```
+   ```alternative
+   source .venv/Scripts/activate
+   ```
 
 4. **Instal dependensi**:
    ```bash
