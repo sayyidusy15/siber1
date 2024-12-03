@@ -1,5 +1,5 @@
 # menambahkan jsonify, make_response
-from flask import Flask, session, render_template, request, redirect, url_for, jsonify, make_response
+from flask import Flask, flash, session, render_template, request, redirect, url_for, jsonify, make_response
 from flask_sqlalchemy import SQLAlchemy
 from sqlalchemy import text
 import sqlite3
@@ -21,6 +21,10 @@ USER_CREDENTIALS = [
     {
         "username": hashlib.sha256("user1".encode()).hexdigest(),
         "password": hashlib.sha256("password1".encode()).hexdigest(),
+    },
+    {
+        "username": hashlib.sha256("user2".encode()).hexdigest(),
+        "password": hashlib.sha256("password2".encode()).hexdigest(),
     },
 ]
 # --- Akhir menambahan Hardcoded
@@ -106,64 +110,100 @@ def index():
 
 @app.route('/add', methods=['POST'])
 def add_student():
-    name = request.form['name']
-    age = request.form['age']
-    grade = request.form['grade']
-    # Cuplikan pengamanan aset atau 'ownership'
-    userid = session.get('userid')
-    # end
-    
+    data = request.get_json()  # Mengambil data JSON yang dikirim
+    name = data.get('name')
+    age = data.get('age')
+    grade = data.get('grade')
 
+    # Cuplikan pengamanan aset atau 'ownership'
+    session_id = request.cookies.get('session_id')
+    session_data = cipher.decrypt(session_id.encode()).decode()
+    user_session = sessions.get(session_data)
+    userid = user_session.get('userid')
+    # end
+
+    # Menambahkan data siswa ke database
     connection = sqlite3.connect('instance/students.db')
     cursor = connection.cursor()
-
-    # RAW Query
-    # db.session.execute(
-    #     text("INSERT INTO student (name, age, grade) VALUES (:name, :age, :grade)"),
-    #     {'name': name, 'age': age, 'grade': grade}
-    # )
-    # db.session.commit()
-
-
-    query = f"INSERT INTO student (name, age, grade) VALUES ('{name}', {age}, '{grade}')"
+    query = f"INSERT INTO student (name, age, grade, userid) VALUES ('{name}', {age}, '{grade}', '{userid}')"
     cursor.execute(query)
     connection.commit()
     connection.close()
-    return redirect(url_for('index'))
 
+    # Mengembalikan respon JSON
+    return jsonify({'success': True}), 200
 
-@app.route('/delete/<string:id>') 
+@app.route('/delete/<string:id>', methods=['GET'])
 def delete_student(id):
-    # Cuplikan pengamanan aset atau 'ownership'
-    student = db.session.execute(text(f"SELECT * FROM student WHERE id={id}")).fetchone()
-    if student.userid != session.get('userid'):
-        return jsonify({"error": "User is not permitted to edit this student"}), 403
-    # end
+    # Mendapatkan session_id dari cookie
+    session_id_encrypted = request.cookies.get('session_id')
+    if not session_id_encrypted:
+        return redirect(url_for('login'))
 
-    # RAW Query
+    # Dekripsi session_id dan dapatkan session yang valid
+    try:
+        session_id = cipher.decrypt(session_id_encrypted.encode()).decode()
+        session_data = sessions.get(session_id)
+        if not session_data or session_data['expires'] < datetime.datetime.now():
+            return redirect(url_for('login'))
+    except Exception:
+        return redirect(url_for('login'))
+
+    # Mendapatkan userid dari session_data yang sudah didekripsi
+    user_id = session_data['userid']
+    
+    # Ambil data siswa berdasarkan ID
+    student = db.session.execute(text(f"SELECT * FROM student WHERE id={id}")).fetchone()
+    
+    # Memeriksa apakah user yang sedang login adalah pemilik dari data siswa tersebut
+    if student.userid != user_id:
+        return jsonify({"error": "User is not permitted to delete this student"}), 403  # Mengembalikan status 403 jika userid tidak sesuai
+
+    # Menghapus data siswa dari database
     db.session.execute(text(f"DELETE FROM student WHERE id={id}"))
     db.session.commit()
-    return redirect(url_for('index'))
+    return redirect(url_for('index'))  # Kembali ke halaman utama setelah menghapus
 
 
 @app.route('/edit/<int:id>', methods=['GET', 'POST'])
 def edit_student(id):
-    # Cuplikan pengamanan aset atau 'ownership'
+    # Mendapatkan session_id dari cookie
+    session_id_encrypted = request.cookies.get('session_id')
+    if not session_id_encrypted:
+        return redirect(url_for('login'))
+
+    # Dekripsi session_id dan dapatkan session yang valid
+    try:
+        session_id = cipher.decrypt(session_id_encrypted.encode()).decode()
+        session_data = sessions.get(session_id)
+        if not session_data or session_data['expires'] < datetime.datetime.now():
+            return redirect(url_for('login'))
+    except Exception:
+        return redirect(url_for('login'))
+
+    # Mendapatkan userid dari session_data yang sudah didekripsi
+    user_id = session_data['userid']
+
+    # Ambil data siswa berdasarkan ID
     student = db.session.execute(text(f"SELECT * FROM student WHERE id={id}")).fetchone()
-    if student.userid != session.get('userid'):
-        return '''Tidak boleh diupdate''', 403
+
+    # Memeriksa apakah user yang sedang login adalah pemilik dari data siswa tersebut
+    if student.userid != user_id:
+        return '''Tidak boleh diupdate, Anda bukan pemilik data ini.''' , 403  # Mengembalikan status 403 jika userid tidak sesuai
+
     if request.method == 'POST':
-    # end
+        # Mendapatkan data dari form
         name = request.form['name']
         age = request.form['age']
         grade = request.form['grade']
-        
-        # RAW Query
+
+        # Mengupdate data siswa di database
         db.session.execute(text(f"UPDATE student SET name='{name}', age={age}, grade='{grade}' WHERE id={id}"))
         db.session.commit()
-        return redirect(url_for('index'))
+        
+        return redirect(url_for('index'))  # Kembali ke halaman utama setelah update
     else:
-        # RAW Query
+        # Menampilkan halaman edit dengan data siswa yang sudah ada
         return render_template('edit.html', student=student)
 
 # if __name__ == '__main__':
